@@ -40,7 +40,7 @@ func NewHuyaLink(rid string, proxy *url.URL, debug bool) (*Link, error) {
 	if proxy != nil {
 		hy.client = &http.Client{Transport: lib.NewAddHeaderTransport(&http.Transport{Proxy: http.ProxyURL(proxy)}, true)}
 	} else {
-		hy.client = &http.Client{Transport: lib.NewAddHeaderTransport(nil, false)}
+		hy.client = &http.Client{Transport: lib.NewAddHeaderTransport(nil, true)}
 	}
 	err = hy.getRoomInfo()
 	if err != nil {
@@ -155,12 +155,12 @@ func (l *Link) getLive() (string, error) {
 		}
 		return true
 	})
-	if len(stream_info["flv"]) <= 0 {
+	if len(stream_info["hls"]) <= 0 {
 		return "", errors.New("no flv link found")
 	}
 	r := rand.New(rand.NewSource(time.Now().Unix()))
 
-	return stream_info["flv"][r.Intn(len(stream_info["flv"])-1)], nil
+	return stream_info["hls"][r.Intn(len(stream_info["hls"])-1)], nil
 }
 
 func (l *Link) getRoomInfo() (err error) {

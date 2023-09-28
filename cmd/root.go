@@ -53,9 +53,9 @@ var rootCmd = &cobra.Command{
 			if p != "" {
 				ctx.Set("proxy", p)
 			}
+			ctx.Next()
 		})
 		r.GET("/:platform/:room", controllers.Forwarder)
-		r.GET("/:platform/:room/*param", controllers.Forwarder)
 		if isDebug {
 			r.GET("/debug/pprof/", func(ctx *gin.Context) { pprof.Index(ctx.Writer, ctx.Request) })
 			r.GET("/debug/pprof/:1", func(ctx *gin.Context) { pprof.Index(ctx.Writer, ctx.Request) })

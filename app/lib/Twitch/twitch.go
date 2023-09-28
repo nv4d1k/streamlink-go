@@ -3,6 +3,7 @@ package Twitch
 import (
 	"errors"
 	"fmt"
+	"github.com/nv4d1k/streamlink-go/app/lib"
 	"io"
 	"log"
 	"net/http"
@@ -22,22 +23,17 @@ type Link struct {
 	client *http.Client
 }
 
-func NewTwitchLink(rid string, proxy string, debug bool) (*Link, error) {
+func NewTwitchLink(rid string, proxy *url.URL, debug bool) (*Link, error) {
 	var (
-		err      error
-		proxyURL *url.URL
+		err error
 	)
 	tw := new(Link)
 	tw.rid = rid
 	tw.debug = debug
-	if len(proxy) > 0 {
-		proxyURL, err = url.Parse(proxy)
-		if err != nil {
-			return nil, err
-		}
-		tw.client = &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
+	if proxy != nil {
+		tw.client = &http.Client{Transport: lib.NewAddHeaderTransport(&http.Transport{Proxy: http.ProxyURL(proxy)}, false)}
 	} else {
-		tw.client = &http.Client{}
+		tw.client = &http.Client{Transport: lib.NewAddHeaderTransport(nil, false)}
 	}
 	err = tw.getClientID()
 	if err != nil {

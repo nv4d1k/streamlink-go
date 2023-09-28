@@ -32,8 +32,11 @@ func Forwarder(c *gin.Context) {
 		debug = d.(bool)
 	}
 	if debug {
-		log.Println(fmt.Sprintf("incoming request URL path: %s", c.Request.URL.Path))
-		log.Println(fmt.Sprintf("incoming request room: %s %s", c.Param("platform"), c.Param("room")))
+		log.Printf("incoming request URL path: %s\n", c.Request.URL.Path)
+		log.Printf("incoming request room: %s %s\n", c.Param("platform"), c.Param("room"))
+		if proxyURL != nil {
+			log.Printf("incoming request proxy: %s\n", proxyURL.String())
+		}
 	}
 	switch strings.ToLower(c.Param("platform")) {
 	case "douyu":
@@ -50,24 +53,15 @@ func Forwarder(c *gin.Context) {
 		}
 		return
 	case "huya":
-		link, err := HuYa.NewHuyaLink(c.Param("room"), proxyURL, debug)
-		if err != nil {
-			c.String(500, err.Error())
-			return
-		}
-
-		p := forwarder.NewFLV(link, proxyURL, debug)
-		err = p.Start(c.Writer)
-		if err != nil {
-			c.String(500, err.Error())
-			return
-		}
-		return
-	case "twitch":
-		pp := c.Param("param")
-		prefix := fmt.Sprintf("/%s/%s", c.Param("platform"), c.Param("room"))
+		pp := c.DefaultQuery("url", "")
+		prefix := fmt.Sprintf("%s://%s%s", func() string {
+			if c.Request.TLS != nil {
+				return "https"
+			}
+			return "http"
+		}(), c.Request.Host, c.Request.URL.Path)
 		if pp == "" {
-			link, err := Twitch.NewTwitchLink(c.Param("room"), proxy, debug)
+			link, err := HuYa.NewHuyaLink(c.Param("room"), proxyURL, debug)
 			if err != nil {
 				c.String(500, err.Error())
 				return
@@ -77,7 +71,7 @@ func Forwarder(c *gin.Context) {
 				c.String(500, err.Error())
 				return
 			}
-			p := m3u8.NewM3u8(false, proxyURL)
+			p := m3u8.NewM3u8(proxyURL, debug)
 			p.ForwardM3u8(c, url, prefix)
 			if err != nil {
 				c.String(400, err.Error())
@@ -85,7 +79,49 @@ func Forwarder(c *gin.Context) {
 			}
 			c.String(200, "OK")
 		} else {
-			p := m3u8.NewM3u8(false, proxyURL)
+			p := m3u8.NewM3u8(proxyURL, debug)
+			err := p.Forward(c, pp, prefix)
+			if err != nil {
+				c.String(400, err.Error())
+				return
+			}
+		}
+
+		/*p := forwarder.NewFLV(link, proxyURL, debug)
+		err = p.Start(c.Writer)
+		if err != nil {
+			c.String(500, err.Error())
+			return
+		}*/
+		return
+	case "twitch":
+		pp := c.DefaultQuery("url", "")
+		prefix := fmt.Sprintf("%s://%s%s", func() string {
+			if c.Request.TLS != nil {
+				return "https"
+			}
+			return "http"
+		}(), c.Request.Host, c.Request.URL.Path)
+		if pp == "" {
+			link, err := Twitch.NewTwitchLink(c.Param("room"), proxyURL, debug)
+			if err != nil {
+				c.String(500, err.Error())
+				return
+			}
+			url, err := link.GetLink()
+			if err != nil {
+				c.String(500, err.Error())
+				return
+			}
+			p := m3u8.NewM3u8(proxyURL, debug)
+			p.ForwardM3u8(c, url, prefix)
+			if err != nil {
+				c.String(400, err.Error())
+				return
+			}
+			c.String(200, "OK")
+		} else {
+			p := m3u8.NewM3u8(proxyURL, debug)
 			err := p.Forward(c, pp, prefix)
 			if err != nil {
 				c.String(400, err.Error())
