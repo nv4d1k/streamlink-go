@@ -24,8 +24,11 @@ import (
 
 func (l *Link) GetLink() (string, error) {
 	data, err := l.getRateStream()
+	if l.debug {
+		log.Printf("rate stream data: %s\n", data.Raw)
+	}
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("get rate stream error: %w", err)
 	}
 	if data.Get("data.p2p").Int() == 0 {
 		return fmt.Sprintf("%s/%s", data.Get("data.rtmp_url").String(), data.Get("data.rtmp_live").String()), nil
@@ -55,17 +58,20 @@ func (l *Link) getDeviceID() (did string, err error) {
 	)
 	req, err = http.NewRequest("GET", fmt.Sprintf("https://passport.douyu.com/lapi/did/api/get?client_id=25&_=%s&callback=axiosJsonpCallback1", l.t13), nil)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("making request error for get device id: %w", err)
 	}
 	req.Header.Set("Referer", "https://m.douyu.com/")
 	resp, err = l.client.Do(req)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("sending request error for get device id: %w", err)
 	}
 	defer resp.Body.Close()
 	body, err = io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("parsing body error for get device id: %w", err)
+	}
+	if l.debug {
+		log.Printf("get device id response body: %s", string(body))
 	}
 	didJson := didRegex.FindStringSubmatch(string(body))
 	if len(didJson) != 2 {
@@ -122,6 +128,9 @@ FIND:
 		return gjson.Result{}, fmt.Errorf("running ub98484234 error: %w", err)
 	}
 	result := vmResult.String()
+	if l.debug {
+		log.Printf("result of running ub98484234: %s\n", result)
+	}
 	re := regexp.MustCompile(`v=(\d+)`)
 	match := re.FindStringSubmatch(result)
 	if len(match) < 2 {
@@ -173,17 +182,17 @@ func (l *Link) getRealRoomID(rfid string) (rid string, err error) {
 	ridRegex := regexp.MustCompile(`ROOM\.room_id\s?=\s?(\d{1,8});`)
 	resp, err := l.client.Get(fmt.Sprintf("https://www.douyu.com/%s", rfid))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("send request error when getting real room id: %w", err)
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("parsing response body error when getting real room id: %w", err)
 	}
 	l.res = string(body)
 	rids := ridRegex.FindStringSubmatch(l.res)
 	if len(rids) != 2 {
-		return "", errors.New("房间号错误")
+		return "", errors.New("invalidate room id")
 	}
 	return rids[1], nil
 }
@@ -214,7 +223,10 @@ func (l *Link) getPreData() (errorCode int64, err error) {
 	defer resp.Body.Close()
 	body, err = io.ReadAll(resp.Body)
 	if err != nil {
-		return 0, fmt.Errorf("parse data error: %w", err)
+		return 0, fmt.Errorf("parse body error for get predata: %w", err)
+	}
+	if l.debug {
+		log.Printf("predata body: %s", string(body))
 	}
 	l.apiErrCode = gjson.GetBytes(body, "error").Int()
 	switch gjson.GetBytes(body, "error").Int() {

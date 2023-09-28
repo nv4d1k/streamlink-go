@@ -41,11 +41,11 @@ func NewDouyuLink(rid string, proxy *url.URL, debug bool) (*Link, error) {
 	}
 	dy.rid, err = dy.getRealRoomID(rid)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get real room id error: %w", err)
 	}
 	dy.did, err = dy.getDeviceID()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get device id error: %w", err)
 	}
 	_, err = dy.getPreData()
 	if err != nil {
