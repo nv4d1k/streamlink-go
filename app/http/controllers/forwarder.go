@@ -50,7 +50,7 @@ func Forwarder(c *gin.Context) {
 		}
 		return
 	case "huya":
-		link, err := HuYa.NewHuyaLink(c.Param("room"), proxy, debug)
+		link, err := HuYa.NewHuyaLink(c.Param("room"), proxyURL, debug)
 		if err != nil {
 			c.String(500, err.Error())
 			return

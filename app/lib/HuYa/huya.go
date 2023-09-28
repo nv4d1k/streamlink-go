@@ -20,10 +20,6 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-var CDN_TYPE = map[string]string{
-	"AL": "阿里", "TX": "腾讯", "HW": "华为", "HS": "火山", "WS": "网宿", "HY": "虎牙",
-}
-
 type Link struct {
 	rid    string
 	uid    string
@@ -34,30 +30,25 @@ type Link struct {
 	client *http.Client
 }
 
-func NewHuyaLink(rid string, proxy string, debug bool) (*Link, error) {
+func NewHuyaLink(rid string, proxy *url.URL, debug bool) (*Link, error) {
 	var (
-		err      error
-		proxyURL *url.URL
+		err error
 	)
 	hy := new(Link)
 	hy.rid = rid
 	hy.debug = debug
-	if len(proxy) > 0 {
-		proxyURL, err = url.Parse(proxy)
-		if err != nil {
-			return nil, err
-		}
-		hy.client = &http.Client{Transport: lib.NewAddHeaderTransport(&http.Transport{Proxy: http.ProxyURL(proxyURL)}, true)}
+	if proxy != nil {
+		hy.client = &http.Client{Transport: lib.NewAddHeaderTransport(&http.Transport{Proxy: http.ProxyURL(proxy)}, true)}
 	} else {
 		hy.client = &http.Client{Transport: lib.NewAddHeaderTransport(nil, false)}
 	}
 	err = hy.getRoomInfo()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get room info error: %w", err)
 	}
 	err = hy.getAnonymousUID()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get anonymous user id error: %w", err)
 	}
 	hy.getUUID()
 	return hy, nil
@@ -68,13 +59,13 @@ func (l *Link) GetLink() (string, error) {
 	case 2:
 		liveInfo, err := l.getLive()
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("get live info error: %w", err)
 		}
 		return liveInfo, nil
 	case 3:
 		liveLineURL, err := base64.StdEncoding.DecodeString(l.res.Get("roomProfile.liveLineUrl").String())
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("decoding live line url error: %w", err)
 		}
 		return fmt.Sprintf("https:%s", liveLineURL), nil
 	}
@@ -95,7 +86,7 @@ func (l *Link) getAnonymousUID() (err error) {
     }`
 	resp, err = l.client.Post("https://udblgn.huya.com/web/anonymousLogin", "application/json", strings.NewReader(data))
 	if err != nil {
-		return
+		return fmt.Errorf("sending get anonymous uid request error: %w", err)
 	}
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
@@ -105,7 +96,10 @@ func (l *Link) getAnonymousUID() (err error) {
 	}(resp.Body)
 	body, err = io.ReadAll(resp.Body)
 	if err != nil {
-		return
+		return fmt.Errorf("parsing get anonymous uid response body error: %w", err)
+	}
+	if l.debug {
+		log.Printf("get anonymous uid response body:\n%s\n", string(body))
 	}
 	if !gjson.GetBytes(body, "data.uid").Exists() {
 		return errors.New("anonymous user id not found")
@@ -126,7 +120,7 @@ func (l *Link) getLive() (string, error) {
 		if value.Get("sFlvUrl").Exists() {
 			anticode, err := l.processAntiCode(value.Get("sFlvAntiCode").String(), value.Get("sStreamName").String())
 			if err != nil {
-				log.Println(err.Error())
+				log.Println(fmt.Sprintf("processing anticode error: %s", err.Error()))
 				return false
 			}
 			u, err := url.Parse(fmt.Sprintf("%s/%s.%s?%s",
@@ -144,7 +138,7 @@ func (l *Link) getLive() (string, error) {
 		if value.Get("sHlsUrl").Exists() {
 			anticode, err := l.processAntiCode(value.Get("sHlsAntiCode").String(), value.Get("sStreamName").String())
 			if err != nil {
-				log.Println(err.Error())
+				log.Println(fmt.Sprintf("processing anticode error: %s", err.Error()))
 				return false
 			}
 			u, err := url.Parse(fmt.Sprintf("%s/%s.%s?%s",
@@ -177,13 +171,13 @@ func (l *Link) getRoomInfo() (err error) {
 	)
 	req, err = http.NewRequest("GET", fmt.Sprintf("https://m.huya.com/%s", l.rid), nil)
 	if err != nil {
-		return
+		return fmt.Errorf("making request for get room info error: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("User-Agent", lib.DEFAULT_MOBILE_USER_AGENT)
 	resp, err = l.client.Do(req)
 	if err != nil {
-		return
+		return fmt.Errorf("sending request for get room info error: %w", err)
 	}
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
@@ -200,6 +194,9 @@ func (l *Link) getRoomInfo() (err error) {
 	if len(result) < 2 {
 		return errors.New("HNF_GLOBAL_INIT not found")
 	}
+	if l.debug {
+		log.Printf("room info:\n%s\n", result[1])
+	}
 	l.res = gjson.Parse(result[1])
 	return nil
 }
@@ -214,7 +211,7 @@ func (l *Link) getUUID() {
 func (l *Link) processAntiCode(anticode string, streamname string) (params string, err error) {
 	q, err := url.ParseQuery(anticode)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("parsing anticode error: %w", err)
 	}
 	q.Set("ver", "1")
 	q.Set("sv", "2110211124")
@@ -225,9 +222,12 @@ func (l *Link) processAntiCode(anticode string, streamname string) (params strin
 	ss := hex.EncodeToString(ssb[:])
 	fm_orig, err := base64.StdEncoding.DecodeString(q.Get("fm"))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("decoding fm error: %w", err)
 	}
 	fm_orig_str := string(fm_orig)
+	if l.debug {
+		log.Printf("decoded fm: %s", fm_orig_str)
+	}
 	fm_orig_str = strings.Replace(fm_orig_str, "$0", l.uid, -1)
 	fm_orig_str = strings.Replace(fm_orig_str, "$1", streamname, -1)
 	fm_orig_str = strings.Replace(fm_orig_str, "$2", ss, -1)
