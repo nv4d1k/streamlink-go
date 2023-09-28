@@ -14,12 +14,13 @@ import (
 	"github.com/nv4d1k/streamlink-go/app/lib/pipe"
 )
 
-func NewXP2PClient(u string, header http.Header, proxy *url.URL) lib.Background {
+func NewXP2PClient(u string, header http.Header, proxy *url.URL, debug bool) lib.Background {
 	c := &client{
 		url:    u,
 		header: header,
 		dialer: &ws.Dialer{},
 		pipe:   pipe.NewPipe(),
+		debug:  debug,
 	}
 	if proxy != nil {
 		c.dialer.Proxy = http.ProxyURL(proxy)
@@ -38,6 +39,7 @@ type client struct {
 	conn   *ws.Conn
 	stopCh chan struct{}
 	pipe   *pipe.Pipe
+	debug  bool
 }
 
 func (c *client) Start() error {
@@ -46,7 +48,7 @@ func (c *client) Start() error {
 	defer cancel()
 	err := c.DialContext(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("dail context error: %w", err)
 	}
 	go c.ReadLoop()
 	return nil

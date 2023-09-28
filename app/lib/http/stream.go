@@ -4,22 +4,23 @@ import (
 	"bufio"
 	"crypto/tls"
 	"fmt"
+	"github.com/nv4d1k/streamlink-go/app/lib"
+	"github.com/nv4d1k/streamlink-go/app/lib/pipe"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"runtime"
-
-	"github.com/nv4d1k/streamlink-go/app/lib"
-	"github.com/nv4d1k/streamlink-go/app/lib/pipe"
 )
 
-func NewStream(url string, header http.Header, proxy *url.URL) lib.Background {
+func NewStream(url string, header http.Header, proxy *url.URL, debug bool) lib.Background {
 
 	s := &stream{
 		url:    url,
 		pipe:   pipe.NewPipe(),
 		header: header,
 		proxy:  proxy,
+		debug:  debug,
 	}
 	runtime.SetFinalizer(s, func(s *stream) {
 		s.Close()
@@ -31,13 +32,16 @@ type stream struct {
 	url    string
 	header http.Header
 	proxy  *url.URL
+	debug  bool
 	conn   net.Conn
 	pipe   *pipe.Pipe
 	r      *bufio.Reader
 }
 
 func (st *stream) request(req *http.Request, depth int) (*http.Response, *bufio.Reader, net.Conn, error) {
-	println(req.URL.String())
+	if st.debug {
+		log.Printf("stream request url: %s\n", req.URL.String())
+	}
 	if depth > 30 {
 		return nil, nil, nil, fmt.Errorf("too many redirects")
 	}
@@ -57,14 +61,17 @@ func (st *stream) request(req *http.Request, depth int) (*http.Response, *bufio.
 		conn, err = tls.Dial("tcp", ux.Host, nil)
 	}
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, fmt.Errorf("dial to request host error: %w", err)
 	}
 	err = req.Write(conn)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, fmt.Errorf("write request error: %w", err)
 	}
 	c := bufio.NewReader(conn)
 	resp, err := http.ReadResponse(c, req)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("read response error: %w", err)
+	}
 	switch resp.StatusCode {
 	case http.StatusOK:
 		return resp, c, conn, nil
@@ -88,13 +95,13 @@ func (st *stream) Start() error {
 
 	req, err := http.NewRequest(http.MethodGet, st.url, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("make request error: %w", err)
 	}
 	req.Header = st.header
 
 	_, r, conn, err := st.request(req, 0)
 	if err != nil {
-		return err
+		return fmt.Errorf("send request error: %w", err)
 	}
 	st.r = r
 	st.conn = conn

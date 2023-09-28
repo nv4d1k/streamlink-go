@@ -44,18 +44,18 @@ func (s *flvStream) Start(w gin.ResponseWriter) error {
 		log.Println(fmt.Sprintf("backend url: %s", u))
 	}
 	if err != nil {
-		return err
+		return fmt.Errorf("get backend url error: %w", err)
 	}
 	ux, err := url.Parse(u)
 	if err != nil {
-		return err
+		return fmt.Errorf("parse backend url error: %w", err)
 	}
 	var st lib.Background
 	switch ux.Scheme {
 	case "http", "https":
-		st = h.NewStream(u, s.httpHeader(), s.proxy)
+		st = h.NewStream(u, s.httpHeader(), s.proxy, s.debug)
 	case "ws", "wss":
-		st = xp2p.NewXP2PClient(u, s.httpHeader(), s.proxy)
+		st = xp2p.NewXP2PClient(u, s.httpHeader(), s.proxy, s.debug)
 	default:
 		return fmt.Errorf("unknown protocol: %s", ux.Scheme)
 	}
