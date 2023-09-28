@@ -66,18 +66,43 @@ func Forwarder(c *gin.Context) {
 				c.String(500, err.Error())
 				return
 			}
-			url, err := link.GetLink()
+			u, err := link.GetLink()
 			if err != nil {
 				c.String(500, err.Error())
 				return
 			}
-			p := m3u8.NewM3u8(proxyURL, debug)
-			p.ForwardM3u8(c, url, prefix)
+			ux, err := url.Parse(u)
 			if err != nil {
 				c.String(400, err.Error())
 				return
 			}
-			c.String(200, "OK")
+			upa := strings.Split(ux.Path, "/")
+			fname := upa[len(upa)-1]
+			fnames := strings.Split(fname, ".")
+			if len(fnames) != 2 {
+				c.String(500, "stream link has a invalid file name")
+				return
+			}
+			switch fnames[1] {
+			case "m3u8":
+				p := m3u8.NewM3u8(proxyURL, debug)
+				err = p.ForwardM3u8(c, u, prefix)
+				if err != nil {
+					c.String(400, err.Error())
+					return
+				}
+				c.String(200, "OK")
+			case "flv":
+				p := forwarder.NewFLV(link, proxyURL, debug)
+				err = p.Start(c.Writer)
+				if err != nil {
+					c.String(500, err.Error())
+					return
+				}
+			default:
+				c.String(500, "unsupported format")
+				return
+			}
 		} else {
 			p := m3u8.NewM3u8(proxyURL, debug)
 			err := p.Forward(c, pp, prefix)
