@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"fmt"
+	"github.com/nv4d1k/streamlink-go/app/lib/BiliBili"
 	"log"
 	"net/url"
 	"strings"
@@ -145,6 +146,66 @@ func Forwarder(c *gin.Context) {
 				return
 			}
 			c.String(200, "OK")
+		} else {
+			p := m3u8.NewM3u8(proxyURL, debug)
+			err := p.Forward(c, pp, prefix)
+			if err != nil {
+				c.String(400, err.Error())
+				return
+			}
+		}
+		return
+	case "bilibili":
+		pp := c.DefaultQuery("url", "")
+		prefix := fmt.Sprintf("%s://%s%s", func() string {
+			if c.Request.TLS != nil {
+				return "https"
+			}
+			return "http"
+		}(), c.Request.Host, c.Request.URL.Path)
+		if pp == "" {
+			link, err := BiliBili.NewBiliBiliLink(c.Param("room"), proxyURL, debug)
+			if err != nil {
+				c.String(500, err.Error())
+				return
+			}
+			u, err := link.GetLink()
+			if err != nil {
+				c.String(500, err.Error())
+				return
+			}
+			ux, err := url.Parse(u)
+			if err != nil {
+				c.String(400, err.Error())
+				return
+			}
+			upa := strings.Split(ux.Path, "/")
+			fname := upa[len(upa)-1]
+			fnames := strings.Split(fname, ".")
+			if len(fnames) != 2 {
+				c.String(500, "stream link has a invalid file name")
+				return
+			}
+			switch fnames[1] {
+			case "m3u8":
+				p := m3u8.NewM3u8(proxyURL, debug)
+				err = p.ForwardM3u8(c, u, prefix)
+				if err != nil {
+					c.String(400, err.Error())
+					return
+				}
+				c.String(200, "OK")
+			case "flv":
+				p := forwarder.NewFLV(link, proxyURL, debug)
+				err = p.Start(c.Writer)
+				if err != nil {
+					c.String(500, err.Error())
+					return
+				}
+			default:
+				c.String(500, "unsupported format")
+				return
+			}
 		} else {
 			p := m3u8.NewM3u8(proxyURL, debug)
 			err := p.Forward(c, pp, prefix)
