@@ -7,6 +7,7 @@ streamlink-go is a tool that converts website live streams into local live broad
 |[Douyu](https://www.douyu.com "douyu.com") |douyu|
 |[Huya](https://www.huya.com "huya.com") | huya|
 |[Twitch](https://twitch.tv "Twitch")|twitch|
+|[Bilibili](https://live.bilibili.com "BiliBili")|bilibili|
 ## Installing
 Just download at [releases](https://github.com/nv4d1k/streamlink-go/releases "releases") page and decompressing it to anywhere you wanted.
 ## Usage
@@ -27,9 +28,9 @@ Start the service with http proxy. eg.
     streamlink-go --proxy http://<username>:<password>@<address>:<port>
 Open the stream on video player. eg.
 
-    http://<address>:<port>/<platform>/<room id>
+    http://<address>:<port>/<platform url token>/<room id>
 Open the stream on video player with http proxy. eg.
 
-    http://<address>:<port>/<platform>/<room id>?proxy=http://<username>:<password>@<address>:<port>
+    http://<address>:<port>/<platform url token>/<room id>?proxy=http://<username>:<password>@<address>:<port>
 ## License
 See [LICENSE.txt](LICENSE.txt)
