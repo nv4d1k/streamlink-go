@@ -34,6 +34,28 @@ type m3u8 struct {
 	debug bool
 }
 
+func (m *m3u8) WrapPlaylist(ctx *gin.Context, origin, prefix string) error {
+	p := libm3u8.NewMasterPlaylist()
+	ux, err := m.ConvertURL(origin, origin, prefix)
+	if err != nil {
+		return err
+	}
+
+	p.Append(ux, nil, libm3u8.VariantParams{
+		Alternatives: []*libm3u8.Alternative{
+			&libm3u8.Alternative{
+				Type:       "VIDEO",
+				Default:    true,
+				Autoselect: "YES",
+			},
+		},
+	})
+	ctx.Writer.Header().Set("content-type", "application/vnd.apple.mpegurl")
+	ctx.Writer.Header().Set("cache-control", "no-cache, no-store, private")
+	ctx.Writer.Header().Set("transfer-encoding", "identity")
+	ctx.String(200, p.Encode().String())
+	return nil
+}
 func (m *m3u8) ConvertURL(origin, last, prefix string) (string, error) {
 	if m.debug {
 		log.Printf("convering url:\norigin: %s\nlast: %s\nprefix: %s\n", origin, last, prefix)
@@ -99,6 +121,7 @@ func (m *m3u8) ForwardM3u8(ctx *gin.Context, url, prefix string) error {
 			}
 			u.URI = v
 		}
+		mediapl.ResetCache()
 	case libm3u8.MASTER:
 		masterpl := p.(*libm3u8.MasterPlaylist)
 		for _, v := range masterpl.Variants {
@@ -108,10 +131,15 @@ func (m *m3u8) ForwardM3u8(ctx *gin.Context, url, prefix string) error {
 			}
 			v.URI = u
 		}
-
+		masterpl.ResetCache()
 	}
 	ctx.Writer.Header().Set("content-type", "application/vnd.apple.mpegurl")
 	ctx.Writer.Header().Set("cache-control", "no-cache, no-store, private")
+	ctx.Writer.Header().Set("transfer-encoding", "identity")
+	if m.debug {
+		log.Printf("write modified m3u8 list content to client:\n%s\n", p.Encode().String())
+	}
+
 	ctx.String(200, p.Encode().String())
 	return nil
 }
@@ -128,6 +156,9 @@ func (m *m3u8) GetM3u8(url string) (libm3u8.Playlist, libm3u8.ListType, error) {
 	p, lt, err := libm3u8.DecodeFrom(resp.Body, true)
 	if err != nil {
 		return nil, 0, fmt.Errorf("decode m3u8 file error: %w", err)
+	}
+	if m.debug {
+		log.Printf("origin m3u8 list content:\n%s\n", p.Encode().String())
 	}
 	return p, lt, err
 
@@ -162,9 +193,12 @@ func (m *m3u8) Forward(ctx *gin.Context, uu, prefix string) error {
 		ctx.Header("content-type", "binary/octet-stream")
 		ctx.Header("accept-ranges", "bytes")
 		ctx.Header("cache-control", "no-cache, no-store, private")
+		ctx.Writer.Header().Set("transfer-encoding", "identity")
 		ctx.Writer.Flush()
-		io.Copy(ctx.Writer, resp.Body)
-
+		_, err = io.Copy(ctx.Writer, resp.Body)
+		if err != nil {
+			return fmt.Errorf("copy chunks error: %w", err)
+		}
 	}
 	return nil
 }

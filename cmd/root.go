@@ -5,11 +5,16 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
 	"net/http/pprof"
 	"os"
+	"time"
+
+	"github.com/gin-contrib/cors"
+	ginglog "github.com/szuecs/gin-glog"
 
 	"github.com/nv4d1k/streamlink-go/app/http/controllers"
 
@@ -22,6 +27,7 @@ var (
 	listenAddress string
 	listenPort    int
 	proxy         string
+	logFile       string
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -40,7 +46,17 @@ var rootCmd = &cobra.Command{
 		if !isDebug {
 			gin.SetMode(gin.ReleaseMode)
 		}
+		corsConfig := cors.Config{
+			AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "HEAD"},
+			AllowHeaders:     []string{"Origin", "Content-Length", "Content-Type", "Authorization"},
+			AllowCredentials: true,
+			MaxAge:           12 * time.Hour,
+			AllowAllOrigins:  true,
+		}
+
 		r := gin.Default()
+		r.Use(ginglog.Logger(3 * time.Second))
+		r.Use(cors.New(corsConfig))
 		r.Use(func(context *gin.Context) {
 			context.Set("debug", isDebug)
 			context.Next()
@@ -55,6 +71,7 @@ var rootCmd = &cobra.Command{
 			}
 			ctx.Next()
 		})
+		r.Use(gin.Recovery())
 		r.GET("/:platform/:room", controllers.Forwarder)
 		if isDebug {
 			r.GET("/debug/pprof/", func(ctx *gin.Context) { pprof.Index(ctx.Writer, ctx.Request) })
@@ -87,6 +104,7 @@ func Execute() {
 }
 
 func init() {
+	cobra.OnInitialize(initConfig)
 	// Here you will define your flags and configuration settings.
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
@@ -100,4 +118,21 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&listenAddress, "listen-address", "l", "127.0.0.1", "listen address")
 	rootCmd.PersistentFlags().IntVarP(&listenPort, "listen-port", "p", 8192, "listen port")
 	rootCmd.PersistentFlags().StringVar(&proxy, "proxy", "", "proxy url")
+	rootCmd.PersistentFlags().StringVar(&logFile, "logfile", "", "logging file")
+}
+
+func initConfig() {
+	var logWriter io.Writer
+	if logFile == "" {
+		logWriter = os.Stdout
+	} else {
+		logFileHandle, err := os.OpenFile(logFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+		if err != nil {
+			log.Fatalln(err.Error())
+		}
+		logWriter = io.MultiWriter(os.Stdout, logFileHandle)
+	}
+	log.SetOutput(logWriter)
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	log.SetPrefix("[streamlink-go]")
 }

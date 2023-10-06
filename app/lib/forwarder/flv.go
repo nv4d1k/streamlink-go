@@ -67,6 +67,9 @@ func (s *flvStream) Start(w gin.ResponseWriter) error {
 	w.Header().Set("transfer-encoding", "identity")
 	w.Header().Set("connection", "close")
 	w.Header().Set("cache-control", "no-cache")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Headers", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "*")
 	w.WriteHeader(200)
 	w.Flush()
 

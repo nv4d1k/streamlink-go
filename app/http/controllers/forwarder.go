@@ -2,10 +2,11 @@ package controllers
 
 import (
 	"fmt"
-	"github.com/nv4d1k/streamlink-go/app/lib/BiliBili"
 	"log"
 	"net/url"
 	"strings"
+
+	"github.com/nv4d1k/streamlink-go/app/lib/BiliBili"
 
 	"github.com/nv4d1k/streamlink-go/app/lib/HuYa"
 	"github.com/nv4d1k/streamlink-go/app/lib/Twitch"
@@ -18,23 +19,28 @@ import (
 )
 
 func Forwarder(c *gin.Context) {
+	debug := false
+	if d, ok := c.Get("debug"); ok {
+		debug = d.(bool)
+	}
 	proxy := c.GetString("proxy")
 	var proxyURL *url.URL
 	var err error
 	if proxy != "" {
 		proxyURL, err = url.Parse(proxy)
 		if err != nil {
+			if debug {
+				log.Printf("parsing proxy error: %s\n", err.Error())
+			}
 			c.String(400, "invalid proxy")
 			return
 		}
 	}
-	debug := false
-	if d, ok := c.Get("debug"); ok {
-		debug = d.(bool)
-	}
+
 	if debug {
 		log.Printf("incoming request URL path: %s\n", c.Request.URL.Path)
 		log.Printf("incoming request room: %s %s\n", c.Param("platform"), c.Param("room"))
+		log.Printf("incoming request query: %s\n", c.Request.URL.RawQuery)
 		if proxyURL != nil {
 			log.Printf("incoming request proxy: %s\n", proxyURL.String())
 		}
@@ -43,12 +49,18 @@ func Forwarder(c *gin.Context) {
 	case "douyu":
 		link, err := DouYu.NewDouyuLink(c.Param("room"), proxyURL, debug)
 		if err != nil {
+			if debug {
+				log.Printf("create douyu link object error: %s\n", err.Error())
+			}
 			c.String(500, err.Error())
 			return
 		}
 		p := forwarder.NewFLV(link, proxyURL, debug)
 		err = p.Start(c.Writer)
 		if err != nil {
+			if debug {
+				log.Printf("starting forward flv stream error: %s\n", err.Error())
+			}
 			c.String(500, err.Error())
 			return
 		}
@@ -64,16 +76,25 @@ func Forwarder(c *gin.Context) {
 		if pp == "" {
 			link, err := HuYa.NewHuyaLink(c.Param("room"), proxyURL, debug)
 			if err != nil {
+				if debug {
+					log.Printf("create huya link object error: %s\n", err.Error())
+				}
 				c.String(500, err.Error())
 				return
 			}
 			u, err := link.GetLink()
 			if err != nil {
+				if debug {
+					log.Printf("get huya stream link error: %s\n", err.Error())
+				}
 				c.String(500, err.Error())
 				return
 			}
 			ux, err := url.Parse(u)
 			if err != nil {
+				if debug {
+					log.Printf("parsing huya stream link error: %s\n", err.Error())
+				}
 				c.String(400, err.Error())
 				return
 			}
@@ -81,22 +102,30 @@ func Forwarder(c *gin.Context) {
 			fname := upa[len(upa)-1]
 			fnames := strings.Split(fname, ".")
 			if len(fnames) != 2 {
+				if debug {
+					log.Printf("stream link has a invalid file name\n")
+				}
 				c.String(500, "stream link has a invalid file name")
 				return
 			}
 			switch fnames[1] {
 			case "m3u8":
 				p := m3u8.NewM3u8(proxyURL, debug)
-				err = p.ForwardM3u8(c, u, prefix)
+				err := p.WrapPlaylist(c, u, prefix)
 				if err != nil {
+					if debug {
+						log.Printf("starting forward m3u8 list error: %s\n", err.Error())
+					}
 					c.String(400, err.Error())
 					return
 				}
-				c.String(200, "OK")
 			case "flv":
 				p := forwarder.NewFLV(link, proxyURL, debug)
 				err = p.Start(c.Writer)
 				if err != nil {
+					if debug {
+						log.Printf("starting forward flv stream error: %s\n", err.Error())
+					}
 					c.String(500, err.Error())
 					return
 				}
@@ -108,17 +137,13 @@ func Forwarder(c *gin.Context) {
 			p := m3u8.NewM3u8(proxyURL, debug)
 			err := p.Forward(c, pp, prefix)
 			if err != nil {
+				if debug {
+					log.Printf("starting forward hls stream error: %s\n", err.Error())
+				}
 				c.String(400, err.Error())
 				return
 			}
 		}
-
-		/*p := forwarder.NewFLV(link, proxyURL, debug)
-		err = p.Start(c.Writer)
-		if err != nil {
-			c.String(500, err.Error())
-			return
-		}*/
 		return
 	case "twitch":
 		pp := c.DefaultQuery("url", "")
@@ -131,25 +156,36 @@ func Forwarder(c *gin.Context) {
 		if pp == "" {
 			link, err := Twitch.NewTwitchLink(c.Param("room"), proxyURL, debug)
 			if err != nil {
+				if debug {
+					log.Printf("create twitch link object error: %s\n", err.Error())
+				}
 				c.String(500, err.Error())
 				return
 			}
 			url, err := link.GetLink()
 			if err != nil {
+				if debug {
+					log.Printf("get twitch stream link error: %s\n", err.Error())
+				}
 				c.String(500, err.Error())
 				return
 			}
 			p := m3u8.NewM3u8(proxyURL, debug)
-			p.ForwardM3u8(c, url, prefix)
+			err = p.ForwardM3u8(c, url, prefix)
 			if err != nil {
+				if debug {
+					log.Printf("starting forward hls list error: %s\n", err.Error())
+				}
 				c.String(400, err.Error())
 				return
 			}
-			c.String(200, "OK")
 		} else {
 			p := m3u8.NewM3u8(proxyURL, debug)
 			err := p.Forward(c, pp, prefix)
 			if err != nil {
+				if debug {
+					log.Printf("starting forward hls stream error: %s\n", err.Error())
+				}
 				c.String(400, err.Error())
 				return
 			}
@@ -166,16 +202,25 @@ func Forwarder(c *gin.Context) {
 		if pp == "" {
 			link, err := BiliBili.NewBiliBiliLink(c.Param("room"), proxyURL, debug)
 			if err != nil {
+				if debug {
+					log.Printf("create bilibili link object error: %s\n", err.Error())
+				}
 				c.String(500, err.Error())
 				return
 			}
 			u, err := link.GetLink()
 			if err != nil {
+				if debug {
+					log.Printf("get bilibili stream link error: %s\n", err.Error())
+				}
 				c.String(500, err.Error())
 				return
 			}
 			ux, err := url.Parse(u)
 			if err != nil {
+				if debug {
+					log.Printf("parsing bilibili stream link error: %s\n", err.Error())
+				}
 				c.String(400, err.Error())
 				return
 			}
@@ -183,22 +228,30 @@ func Forwarder(c *gin.Context) {
 			fname := upa[len(upa)-1]
 			fnames := strings.Split(fname, ".")
 			if len(fnames) != 2 {
+				if debug {
+					log.Printf("stream link has a invalid file name\n")
+				}
 				c.String(500, "stream link has a invalid file name")
 				return
 			}
 			switch fnames[1] {
 			case "m3u8":
 				p := m3u8.NewM3u8(proxyURL, debug)
-				err = p.ForwardM3u8(c, u, prefix)
+				err := p.WrapPlaylist(c, u, prefix)
 				if err != nil {
+					if debug {
+						log.Printf("starting forward m3u8 list error: %s\n", err.Error())
+					}
 					c.String(400, err.Error())
 					return
 				}
-				c.String(200, "OK")
 			case "flv":
 				p := forwarder.NewFLV(link, proxyURL, debug)
 				err = p.Start(c.Writer)
 				if err != nil {
+					if debug {
+						log.Printf("starting forward flv stream error: %s\n", err.Error())
+					}
 					c.String(500, err.Error())
 					return
 				}
@@ -210,6 +263,9 @@ func Forwarder(c *gin.Context) {
 			p := m3u8.NewM3u8(proxyURL, debug)
 			err := p.Forward(c, pp, prefix)
 			if err != nil {
+				if debug {
+					log.Printf("starting forward hls stream error: %s\n", err.Error())
+				}
 				c.String(400, err.Error())
 				return
 			}
