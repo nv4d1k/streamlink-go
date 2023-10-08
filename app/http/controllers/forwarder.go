@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"fmt"
+	"github.com/nv4d1k/streamlink-go/app/lib/DouYin"
 	"log"
 	"net/url"
 	"strings"
@@ -90,25 +91,7 @@ func Forwarder(c *gin.Context) {
 				c.String(500, err.Error())
 				return
 			}
-			ux, err := url.Parse(u)
-			if err != nil {
-				if debug {
-					log.Printf("parsing huya stream link error: %s\n", err.Error())
-				}
-				c.String(400, err.Error())
-				return
-			}
-			upa := strings.Split(ux.Path, "/")
-			fname := upa[len(upa)-1]
-			fnames := strings.Split(fname, ".")
-			if len(fnames) != 2 {
-				if debug {
-					log.Printf("stream link has a invalid file name\n")
-				}
-				c.String(500, "stream link has a invalid file name")
-				return
-			}
-			switch fnames[1] {
+			switch getStreamExt(u) {
 			case "m3u8":
 				p := m3u8.NewM3u8(proxyURL, debug)
 				err := p.WrapPlaylist(c, u, prefix)
@@ -216,25 +199,69 @@ func Forwarder(c *gin.Context) {
 				c.String(500, err.Error())
 				return
 			}
-			ux, err := url.Parse(u)
+			switch getStreamExt(u) {
+			case "m3u8":
+				p := m3u8.NewM3u8(proxyURL, debug)
+				err := p.WrapPlaylist(c, u, prefix)
+				if err != nil {
+					if debug {
+						log.Printf("starting forward m3u8 list error: %s\n", err.Error())
+					}
+					c.String(400, err.Error())
+					return
+				}
+			case "flv":
+				p := forwarder.NewFLV(link, proxyURL, debug)
+				err = p.Start(c.Writer)
+				if err != nil {
+					if debug {
+						log.Printf("starting forward flv stream error: %s\n", err.Error())
+					}
+					c.String(500, err.Error())
+					return
+				}
+			default:
+				c.String(500, "unsupported format")
+				return
+			}
+		} else {
+			p := m3u8.NewM3u8(proxyURL, debug)
+			err := p.Forward(c, pp, prefix)
 			if err != nil {
 				if debug {
-					log.Printf("parsing bilibili stream link error: %s\n", err.Error())
+					log.Printf("starting forward hls stream error: %s\n", err.Error())
 				}
 				c.String(400, err.Error())
 				return
 			}
-			upa := strings.Split(ux.Path, "/")
-			fname := upa[len(upa)-1]
-			fnames := strings.Split(fname, ".")
-			if len(fnames) != 2 {
+		}
+		return
+	case "douyin":
+		pp := c.DefaultQuery("url", "")
+		prefix := fmt.Sprintf("%s://%s%s", func() string {
+			if c.Request.TLS != nil {
+				return "https"
+			}
+			return "http"
+		}(), c.Request.Host, c.Request.URL.Path)
+		if pp == "" {
+			link, err := DouYin.NewDouYinLink(c.Param("room"), proxyURL, debug)
+			if err != nil {
 				if debug {
-					log.Printf("stream link has a invalid file name\n")
+					log.Printf("create douyin link object error: %s\n", err.Error())
 				}
-				c.String(500, "stream link has a invalid file name")
+				c.String(500, err.Error())
 				return
 			}
-			switch fnames[1] {
+			u, err := link.GetLink()
+			if err != nil {
+				if debug {
+					log.Printf("get douyin stream link error: %s", err.Error())
+				}
+				c.String(500, err.Error())
+				return
+			}
+			switch getStreamExt(u) {
 			case "m3u8":
 				p := m3u8.NewM3u8(proxyURL, debug)
 				err := p.WrapPlaylist(c, u, prefix)
@@ -275,5 +302,18 @@ func Forwarder(c *gin.Context) {
 		c.String(400, "unsupported platform")
 		return
 	}
+}
 
+func getStreamExt(urlstr string) string {
+	ux, err := url.Parse(urlstr)
+	if err != nil {
+		return "error"
+	}
+	upa := strings.Split(ux.Path, "/")
+	fname := upa[len(upa)-1]
+	fnames := strings.Split(fname, ".")
+	if len(fnames) != 2 {
+		return "error"
+	}
+	return fnames[1]
 }
