@@ -116,7 +116,7 @@ func init() {
 	//rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 	rootCmd.PersistentFlags().BoolVar(&isDebug, "debug", false, "debug mode")
 	rootCmd.PersistentFlags().StringVarP(&listenAddress, "listen-address", "l", "127.0.0.1", "listen address")
-	rootCmd.PersistentFlags().IntVarP(&listenPort, "listen-port", "p", 8192, "listen port")
+	rootCmd.PersistentFlags().IntVarP(&listenPort, "listen-port", "p", 0, "listen port")
 	rootCmd.PersistentFlags().StringVar(&proxy, "proxy", "", "proxy url")
 	rootCmd.PersistentFlags().StringVar(&logFile, "logfile", "", "logging file")
 }

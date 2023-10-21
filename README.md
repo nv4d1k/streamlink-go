@@ -2,12 +2,13 @@
 ## Overview
 streamlink-go is a tool that converts website live streams into local live broadcast services for video players (eg. VLC or PotPlayer) directly access.
 ## Suppored Live Streaming Platform
-|  Platform | URL token  |
-| ------------ | ------------ |
-|[Douyu](https://www.douyu.com "douyu.com") |douyu|
-|[Huya](https://www.huya.com "huya.com") | huya|
-|[Twitch](https://twitch.tv "Twitch")|twitch|
-|[Bilibili](https://live.bilibili.com "BiliBili")|bilibili|
+| Platform                                         | URL token |
+|--------------------------------------------------|-----------|
+| [Douyu](https://www.douyu.com "douyu.com")       | douyu     |
+| [Huya](https://www.huya.com "huya.com")          | huya      |
+| [Twitch](https://twitch.tv "Twitch")             | twitch    |
+| [Bilibili](https://live.bilibili.com "BiliBili") | bilibili  |
+| [Douyin](https://live.douyin.com "Douyin")       | douyin    |
 ## Installing
 Just download at [releases](https://github.com/nv4d1k/streamlink-go/releases "releases") page and decompressing it to anywhere you wanted.
 ## Usage

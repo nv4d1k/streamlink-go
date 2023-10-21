@@ -4,13 +4,15 @@ import (
 	"bufio"
 	"crypto/tls"
 	"fmt"
-	"github.com/nv4d1k/streamlink-go/app/lib"
-	"github.com/nv4d1k/streamlink-go/app/lib/pipe"
+	"io"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"runtime"
+
+	"github.com/nv4d1k/streamlink-go/app/lib"
+	"github.com/nv4d1k/streamlink-go/app/lib/pipe"
 )
 
 func NewStream(url string, header http.Header, proxy *url.URL, debug bool) lib.Background {
@@ -35,10 +37,10 @@ type stream struct {
 	debug  bool
 	conn   net.Conn
 	pipe   *pipe.Pipe
-	r      *bufio.Reader
+	r      io.Reader
 }
 
-func (st *stream) request(req *http.Request, depth int) (*http.Response, *bufio.Reader, net.Conn, error) {
+func (st *stream) request(req *http.Request, depth int) (*http.Response, io.Reader, net.Conn, error) {
 	if st.debug {
 		log.Printf("stream request url: %s\n", req.URL.String())
 	}
@@ -74,7 +76,7 @@ func (st *stream) request(req *http.Request, depth int) (*http.Response, *bufio.
 	}
 	switch resp.StatusCode {
 	case http.StatusOK:
-		return resp, c, conn, nil
+		return resp, resp.Body, conn, nil
 	case 301, 302:
 		l := resp.Header.Get("location")
 		if l == "" {

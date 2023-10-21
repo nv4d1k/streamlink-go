@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"golang.org/x/net/html"
 	"io"
 	"log"
 	"math"
@@ -17,10 +16,57 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nv4d1k/streamlink-go/app/lib"
+	"golang.org/x/net/html"
+
 	"github.com/dop251/goja"
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
 )
+
+type Link struct {
+	rid        string
+	did        string
+	t10        string
+	t13        string
+	apiErrCode int64
+	res        string
+	proxy      *url.URL
+
+	debug bool
+
+	client *http.Client
+}
+
+func NewDouyuLink(rid string, proxy *url.URL, debug bool) (*Link, error) {
+	var (
+		err      error
+		proxyURL *url.URL
+	)
+	dy := new(Link)
+	dy.t10 = strconv.Itoa(int(time.Now().Unix()))
+	dy.t13 = strconv.Itoa(int(time.Now().UnixMilli()))
+	dy.debug = debug
+	if proxy != nil {
+		dy.client = &http.Client{Transport: lib.NewAddHeaderTransport(&http.Transport{Proxy: http.ProxyURL(proxyURL)}, false)}
+		dy.proxy = proxyURL
+	} else {
+		dy.client = &http.Client{Transport: lib.NewAddHeaderTransport(nil, false)}
+	}
+	dy.rid, err = dy.getRealRoomID(rid)
+	if err != nil {
+		return nil, fmt.Errorf("get real room id error: %w", err)
+	}
+	dy.did, err = dy.getDeviceID()
+	if err != nil {
+		return nil, fmt.Errorf("get device id error: %w", err)
+	}
+	_, err = dy.getPreData()
+	if err != nil {
+		return nil, fmt.Errorf("get pre data error：%w", err)
+	}
+	return dy, nil
+}
 
 func (l *Link) GetLink() (string, error) {
 	data, err := l.getRateStream()
@@ -30,23 +76,47 @@ func (l *Link) GetLink() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("get rate stream error: %w", err)
 	}
-	if data.Get("data.p2p").Int() == 0 {
-		return fmt.Sprintf("%s/%s", data.Get("data.rtmp_url").String(), data.Get("data.rtmp_live").String()), nil
-	}
 	uuid, _ := uuid.NewUUID()
 	s := rand.New(rand.NewSource(time.Now().Unix()))
-	url := fmt.Sprintf("wss://%s/%s/live/%s&delay=%s&playid=%s&uuid=%s&txSecret=%s&txTime=%s",
-		data.Get("data.p2pMeta.dyxp2p_sug_egde").String(),
-		data.Get("data.p2pMeta.dyxp2p_domain").String(),
-		data.Get("data.rtmp_live").String(),
-		data.Get("data.p2pMeta.xp2p_txDelay").String(),
-		l.t13+"-"+strconv.Itoa(int(math.Floor(s.Float64()*999999998))+1),
-		uuid.String(),
-		data.Get("data.p2pMeta.xp2p_txSecret").String(),
-		data.Get("data.p2pMeta.xp2p_txTime").String())
+	switch data.Get("data.p2p").Int() {
+	case 0:
+		return fmt.Sprintf("%s/%s", data.Get("data.rtmp_url").String(), data.Get("data.rtmp_live").String()), nil
+	case 2:
+		txTime := fmt.Sprintf("%x", int64(math.Round((float64(time.Now().UnixMilli())+600000)/1000)))
+		streamID := strings.Split(data.Get("data.rtmp_live").String(), ".")[0]
+		txSecret := func(txTime, streamID string) string {
+			m := md5.Sum([]byte(fmt.Sprintf("5aa5a539c2bea53cd5acc6adf06c8445%s%s", streamID, txTime)))
+			return hex.EncodeToString(m[:])
+		}(txTime, streamID)
+		originURL := fmt.Sprintf("%s/%s&txSecret=%s&txTime=%s&uuid=%s&playid=%s",
+			data.Get("data.rtmp_url").String(),
+			data.Get("data.rtmp_live").String(),
+			txSecret,
+			txTime,
+			uuid.String(),
+			l.t13+"-"+strconv.Itoa(int(math.Floor(s.Float64()*999999998)))+"1",
+		)
+		u, err := url.Parse(originURL)
+		if err != nil {
+			return "", fmt.Errorf("parse origin url error: %w", err)
+		}
+		u.Host = "hlsh5p2.douyucdn2.cn"
+		return strings.ReplaceAll(u.String(), ".flv", ".xs"), nil
+	case 9, 10:
+		url := fmt.Sprintf("wss://%s/%s/live/%s&delay=%s&playid=%s&uuid=%s&txSecret=%s&txTime=%s",
+			data.Get("data.p2pMeta.dyxp2p_sug_egde").String(),
+			data.Get("data.p2pMeta.dyxp2p_domain").String(),
+			data.Get("data.rtmp_live").String(),
+			data.Get("data.p2pMeta.xp2p_txDelay").String(),
+			l.t13+"-"+strconv.Itoa(int(math.Floor(s.Float64()*999999998)))+"1",
+			uuid.String(),
+			data.Get("data.p2pMeta.xp2p_txSecret").String(),
+			data.Get("data.p2pMeta.xp2p_txTime").String())
 
-	url = strings.ReplaceAll(url, ".flv", ".xs")
-	return url, nil
+		url = strings.ReplaceAll(url, ".flv", ".xs")
+		return url, nil
+	}
+	return "", nil
 }
 
 func (l *Link) getDeviceID() (did string, err error) {
