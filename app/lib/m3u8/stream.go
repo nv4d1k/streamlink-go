@@ -114,7 +114,7 @@ func (m *m3u8) ForwardM3u8(ctx *gin.Context, url, prefix string) error {
 		if mediapl.Map != nil && mediapl.Map.URI != "" {
 			xu, err := m.ConvertURL(mediapl.Map.URI, url, prefix)
 			if err != nil {
-				fmt.Errorf("convert map url error: %w", err)
+				return fmt.Errorf("convert map url error: %w", err)
 			}
 			mediapl.Map.URI = xu
 		}
