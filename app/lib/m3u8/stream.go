@@ -111,6 +111,13 @@ func (m *m3u8) ForwardM3u8(ctx *gin.Context, url, prefix string) error {
 	switch lt {
 	case libm3u8.MEDIA:
 		mediapl := p.(*libm3u8.MediaPlaylist)
+		if mediapl.Map != nil && mediapl.Map.URI != "" {
+			xu, err := m.ConvertURL(mediapl.Map.URI, url, prefix)
+			if err != nil {
+				fmt.Errorf("convert map url error: %w", err)
+			}
+			mediapl.Map.URI = xu
+		}
 		for _, u := range mediapl.Segments {
 			if u == nil {
 				continue
@@ -189,10 +196,11 @@ func (m *m3u8) Forward(ctx *gin.Context, uu, prefix string) error {
 			return fmt.Errorf("err got: %s", resp.Status)
 		}
 		defer resp.Body.Close()
+		headers := resp.Header
 		ctx.Status(resp.StatusCode)
-		ctx.Header("content-type", "binary/octet-stream")
-		ctx.Header("accept-ranges", "bytes")
-		ctx.Header("cache-control", "no-cache, no-store, private")
+		for hk, hv := range headers {
+			ctx.Header(hk, strings.Join(hv, ";"))
+		}
 		ctx.Writer.Header().Set("transfer-encoding", "identity")
 		ctx.Writer.Flush()
 		_, err = io.Copy(ctx.Writer, resp.Body)
