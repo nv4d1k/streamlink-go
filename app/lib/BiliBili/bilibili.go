@@ -70,7 +70,7 @@ func (l *Link) GetLink() (string, error) {
 	uq.Set("room_id", l.rid)
 	uq.Set("protocol", "1")   // 0 = http_stream(flv), 1 = http_hls(m3u8)
 	uq.Set("format", "0,1,2") // 0 = flv, 1 = ts, 2 = fmp4
-	uq.Set("codec", "0")      // 0 = avc, 1 = hevc
+	uq.Set("codec", "1")      // 0 = avc, 1 = hevc
 	uq.Set("qn", "10000")
 	uq.Set("platform", "h5")
 	uq.Set("ptype", "8")
